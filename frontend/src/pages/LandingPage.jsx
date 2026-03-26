@@ -34,7 +34,7 @@ const FEATURES = [
   },
   {
     icon: Newspaper,
-    title: 'Inshorts Intelligence',
+    title: 'FinPulse Intelligence',
     desc: 'Finance news with AI sentiment, keyword extraction, and direct links to affected NSE stocks.',
     color: 'text-amber-500',
     ring: 'ring-amber-500/20',

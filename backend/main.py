@@ -11,7 +11,7 @@ from database import init_db
 from routers import chat, signals, cards, health, auth, portfolio
 from routers import search as search_router
 from routers import market as market_router
-from routers import inshorts as inshorts_router
+from routers import finpulse as finpulse_router
 from scheduler import start_scheduler
 from core.db import init_auth_db
 from routes.auth import router as v2_auth_router
@@ -77,7 +77,7 @@ app.include_router(auth.router,          prefix='/api', tags=['Auth'])
 app.include_router(portfolio.router,     prefix='/api', tags=['Portfolio'])
 app.include_router(search_router.router, prefix='/api', tags=['Search'])
 app.include_router(market_router.router, prefix='/api', tags=['Market'])
-app.include_router(inshorts_router.router, prefix='/api', tags=['Inshorts'])
+app.include_router(finpulse_router.router, prefix='/api', tags=['FinPulse'])
 app.include_router(v2_auth_router,          prefix='/api/v2', tags=['Auth v2'])
 
 # Analytics + Audio endpoints

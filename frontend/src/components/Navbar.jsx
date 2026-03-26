@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext'
 const TABS = [
   { id: 'radar',    label: 'Radar',       icon: Activity },
   { id: 'card',     label: 'Signal Card', icon: BarChart2 },
-  { id: 'inshorts', label: 'Inshorts',    icon: Newspaper },
+  { id: 'finpulse', label: 'FinPulse',    icon: Newspaper },
   { id: 'chat',     label: 'Market Chat', icon: MessageSquare },
 ]
 

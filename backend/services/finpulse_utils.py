@@ -1,5 +1,5 @@
-# backend/services/inshorts_utils.py
-"""Rule-based sentiment, short summaries, and insight lines for Inshorts cards."""
+# backend/services/finpulse_utils.py
+"""Rule-based sentiment, short summaries, and insight lines for FinPulse cards."""
 
 from __future__ import annotations
 

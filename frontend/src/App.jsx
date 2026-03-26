@@ -5,7 +5,7 @@ import Navbar from './components/Navbar'
 import RadarPage from './pages/RadarPage'
 import CardPage from './pages/CardPage'
 import ChatPage from './pages/ChatPage'
-import InshortsPage from './pages/InshortsPage'
+import FinPulsePage from './pages/FinPulsePage'
 import MarketWrapButton from './components/MarketWrapButton'
 import WarmupBanner from './components/WarmupBanner'
 import LandingPage from './pages/LandingPage'
@@ -48,7 +48,7 @@ function AppInner() {
         {page === 'radar'    && <RadarPage onSelectStock={handleSelectStock} />}
         {page === 'card'     && <CardPage initialSym={selectedSym} />}
         {page === 'chat'     && <ChatPage />}
-        {page === 'inshorts' && <InshortsPage onSelectStock={handleSelectStock} />}
+        {page === 'finpulse' && <FinPulsePage onSelectStock={handleSelectStock} />}
       </main>
       <MarketWrapButton />
       <footer className="text-center text-xs text-gray-400 dark:text-gray-600 py-3 border-t border-gray-200 dark:border-gray-900">

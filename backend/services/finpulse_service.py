@@ -1,5 +1,5 @@
-# backend/services/inshorts_service.py
-"""Fetches market RSS, filters finance-related items, builds Inshorts card payloads. TTL cache."""
+# backend/services/finpulse_service.py
+"""Fetches market RSS, filters finance-related items, builds FinPulse card payloads. TTL cache."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import time
 
 import feedparser
 
-from services.inshorts_utils import make_summary, rule_insights, sentiment_from_text, strip_html
+from services.finpulse_utils import make_summary, rule_insights, sentiment_from_text, strip_html
 from services.keyword_extractor import extract_keywords, find_nse_symbols, passes_finance_gate
 from services.news_fetcher import ET_RSS_FEEDS
 from services.search_service import NSE_STOCKS
@@ -45,11 +45,11 @@ def _parse_feed_entries() -> list[dict]:
                     }
                 )
         except Exception as e:
-            print(f"[Inshorts] RSS error {url}: {e}")
+            print(f"[FinPulse] RSS error {url}: {e}")
     return rows
 
 
-def build_inshorts_payload(force_refresh: bool = False) -> dict:
+def build_finpulse_payload(force_refresh: bool = False) -> dict:
     """Returns { items: [...], cached_at: iso }"""
     now = time.time()
     if (

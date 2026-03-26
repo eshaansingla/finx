@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ExternalLink, Newspaper, RefreshCw } from 'lucide-react'
-import { fetchInshorts } from '../api'
+import { fetchFinPulse } from '../api'
 
 const SENTIMENT_STYLES = {
   positive: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
@@ -8,7 +8,7 @@ const SENTIMENT_STYLES = {
   neutral: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700',
 }
 
-export default function InshortsPage({ onSelectStock }) {
+export default function FinPulsePage({ onSelectStock }) {
   const [items, setItems] = useState([])
   const [cachedAt, setCachedAt] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -18,7 +18,7 @@ export default function InshortsPage({ onSelectStock }) {
     setErr(null)
     setLoading(true)
     try {
-      const data = await fetchInshorts(force)
+      const data = await fetchFinPulse(force)
       setItems(data.items || [])
       setCachedAt(data.cached_at || null)
     } catch (e) {
@@ -42,7 +42,7 @@ export default function InshortsPage({ onSelectStock }) {
         <div>
           <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <Newspaper className="w-6 h-6 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-            Inshorts
+            FinPulse
           </h2>
           <p className="text-sm text-gray-500 mt-0.5">
             Finance &amp; market headlines — keywords, quick insights, jump to NSE signal cards
