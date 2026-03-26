@@ -17,7 +17,7 @@ def generate_market_minutes() -> dict:
         )
         
         if not signals:
-            return {"script": "Welcome to Falcon X Market Minutes. There have been no new major radar signals detected in the last twenty four hours. Stay tuned for further updates."}
+            return {"script": "Welcome to Fin-X Market Minutes. There have been no new major radar signals detected in the last twenty four hours. Stay tuned for further updates."}
             
         formatted_signals = "\n".join([f"- {s['symbol']} ({s['signal_type']}): {s['explanation']}" for s in signals])
         
@@ -30,7 +30,7 @@ def generate_market_minutes() -> dict:
         script = gemini_call(prompt, max_tokens=256, temperature=0.5)
         
         if not script:
-            script = "Welcome to Falcon X Market Minutes. We are currently processing the latest signals and will be back with your brief shortly."
+            script = "Welcome to Fin-X Market Minutes. We are currently processing the latest signals and will be back with your brief shortly."
             
         # Strip any markdown framing that might have slipped through
         script = script.replace("*", "").replace("`", "").strip()
@@ -39,4 +39,4 @@ def generate_market_minutes() -> dict:
         
     except Exception as e:
         print(f"[AudioBriefing] Error: {e}")
-        return {"script": "Welcome to Falcon X Market Minutes. Our AI is currently offline. Please check the dashboard for the latest opportunities."}
+        return {"script": "Welcome to Fin-X Market Minutes. Our AI is currently offline. Please check the dashboard for the latest opportunities."}
