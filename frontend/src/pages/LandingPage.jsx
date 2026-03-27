@@ -192,7 +192,7 @@ export default function LandingPage({ onAuthed }) {
             </div>
 
             {/* Trust bullets */}
-            <div className="flex flex-wrap gap-x-4 gap-y-1">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-2">
               {TRUST.map(t => (
                 <div key={t} className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />

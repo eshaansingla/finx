@@ -236,21 +236,22 @@ def get_stock_data(symbol: str, period: str = "3mo") -> dict:
 
         closes = series.get("closes") or []
         dates = series.get("dates") or []
-        if not closes or len(closes) < 50 or len(dates) < 50:
+        # Minimum 15 bars — enough for RSI(14). EMA-50/SMA-200 only computed when enough bars exist.
+        if not closes or len(closes) < 15 or len(dates) < 15:
             return {"error": "Insufficient price history", "symbol": (symbol or "").upper()}
 
-        # Indicators
-        rsi_vals = compute_rsi_manual(closes, 14)
-        ema20_vals = compute_ema(closes, 20)
-        ema50_vals = compute_ema(closes, 50)
-        sma200_last = compute_sma_last(closes, 200)
+        # Indicators — each computed only when enough history is available
+        rsi_vals   = compute_rsi_manual(closes, 14)
+        ema20_vals = compute_ema(closes, 20) if len(closes) >= 20 else []
+        ema50_vals = compute_ema(closes, 50) if len(closes) >= 50 else []
+        sma200_last = compute_sma_last(closes, 200) if len(closes) >= 200 else None
 
         last_idx = len(closes) - 1
         prev_idx = last_idx - 1 if last_idx >= 1 else last_idx
 
-        last_rsi = rsi_vals[last_idx] if rsi_vals else None
-        last_ema20 = ema20_vals[last_idx] if ema20_vals else None
-        last_ema50 = ema50_vals[last_idx] if ema50_vals else None
+        last_rsi   = rsi_vals[last_idx]   if rsi_vals   and last_idx < len(rsi_vals)   else None
+        last_ema20 = ema20_vals[last_idx] if ema20_vals and last_idx < len(ema20_vals) else None
+        last_ema50 = ema50_vals[last_idx] if ema50_vals and last_idx < len(ema50_vals) else None
 
         change_pct = current.get("change_pct")
         if change_pct is None or (isinstance(change_pct, float) and math.isnan(change_pct)):

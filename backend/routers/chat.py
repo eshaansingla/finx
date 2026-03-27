@@ -32,7 +32,7 @@ class ChatRequest(BaseModel):
 def chat(req: ChatRequest, user=Depends(get_current_v2_user)):
     """
     Stateful multi-turn chat endpoint.
-    Prefers Gemini; falls back to OpenAI if Gemini is unavailable.
+    Uses Groq (Llama-3.3-70B); falls back to OpenAI if unavailable.
     """
     try:
         session_id = req.session_id or str(uuid.uuid4())

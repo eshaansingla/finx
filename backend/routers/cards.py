@@ -41,78 +41,181 @@ def _mem_set(symbol: str, card: dict):
 
 
 def _rule_based_snapshot(stock_data: dict) -> str:
-    """Generate a data-driven technical snapshot from available indicators."""
-    parts = []
+    """
+    Generate a data-driven technical snapshot from all available indicators.
+    Gracefully handles partial data — always returns a meaningful 1-3 sentence analysis.
+    Priority: RSI → EMA signal → SMA-200 → 52W range → price action fallback.
+    """
+    sentences = []
 
     rsi        = stock_data.get('rsi')
     ema_signal = stock_data.get('ema_signal', '')
+    ema20      = stock_data.get('ema20')
+    ema50      = stock_data.get('ema50')
+    sma200     = stock_data.get('sma200')
     price      = stock_data.get('current_price')
     prev_close = stock_data.get('prev_close')
+    open_price = stock_data.get('open')
+    day_high   = stock_data.get('high')
+    day_low    = stock_data.get('low')
     high_52w   = stock_data.get('high_52w')
     low_52w    = stock_data.get('low_52w')
     volume     = stock_data.get('volume')
-    avg_vol    = stock_data.get('avg_volume')
+    avg_vol    = stock_data.get('avg_volume') or stock_data.get('avg_volume_20d')
 
+    # 1. RSI — most actionable momentum signal
     if rsi is not None:
-        rsi_val = round(float(rsi), 1)
-        if rsi_val >= 70:
-            parts.append(f'RSI at {rsi_val} signals overbought territory — momentum may be exhausted.')
-        elif rsi_val <= 30:
-            parts.append(f'RSI at {rsi_val} signals oversold conditions — potential mean-reversion candidate.')
-        elif rsi_val >= 55:
-            parts.append(f'RSI at {rsi_val} reflects positive momentum with room to run.')
-        elif rsi_val <= 45:
-            parts.append(f'RSI at {rsi_val} reflects weak momentum; watch for further softening.')
-        else:
-            parts.append(f'RSI at {rsi_val} is in neutral territory, showing no extreme bias.')
+        try:
+            rsi_val = round(float(rsi), 1)
+            if rsi_val >= 70:
+                sentences.append(
+                    f'RSI at {rsi_val} is in overbought territory — buying momentum may be exhausting and a short-term pullback risk is elevated.'
+                )
+            elif rsi_val <= 30:
+                sentences.append(
+                    f'RSI at {rsi_val} is oversold — the stock may be approaching a potential mean-reversion bounce.'
+                )
+            elif rsi_val >= 60:
+                sentences.append(
+                    f'RSI at {rsi_val} reflects positive momentum building without hitting overbought extremes.'
+                )
+            elif rsi_val <= 40:
+                sentences.append(
+                    f'RSI at {rsi_val} reflects weakening momentum; watch for continued softening.'
+                )
+            else:
+                sentences.append(
+                    f'RSI at {rsi_val} sits in neutral territory, showing no strong directional bias.'
+                )
+        except (TypeError, ValueError):
+            pass
 
+    # 2. EMA crossover signal — trend direction
     if ema_signal:
-        sig = ema_signal.lower().replace('_', ' ')
-        if 'bullish' in sig or 'crossover' in sig:
-            parts.append('EMA-20 has crossed above EMA-50, signalling a short-term bullish crossover.')
-        elif 'bearish' in sig:
-            parts.append('EMA-20 is below EMA-50, indicating a bearish short-term trend.')
-        else:
-            parts.append(f'EMA trend is {sig}; no strong directional crossover currently.')
+        sig = ema_signal.lower()
+        e20_str = f' (EMA-20: ₹{round(float(ema20)):,})' if ema20 else ''
+        e50_str = f' above EMA-50 (₹{round(float(ema50)):,})' if ema50 else ''
+        try:
+            if 'bullish_crossover' in sig:
+                sentences.append(
+                    f'EMA-20 has freshly crossed above EMA-50{e20_str} — a golden cross forming a short-term bullish crossover.'
+                )
+            elif 'bearish_crossover' in sig:
+                sentences.append(
+                    f'EMA-20 has just crossed below EMA-50 — a death cross forming a short-term bearish crossover, warranting caution.'
+                )
+            elif 'bullish' in sig:
+                sentences.append(
+                    f'EMA-20 is trading{e20_str}{e50_str if ema50 else " above EMA-50"} — sustained short-term bullish momentum.'
+                )
+            elif 'bearish' in sig:
+                sentences.append(
+                    f'EMA-20 is below EMA-50{e20_str} — reflecting short-term downward pressure.'
+                )
+        except (TypeError, ValueError):
+            pass
 
+    # 3. SMA-200 — long-term structural view
+    if sma200 is not None and price is not None:
+        try:
+            is_above = float(price) >= float(sma200)
+            direction = 'above' if is_above else 'below'
+            bias      = 'long-term bullish structure' if is_above else 'long-term bearish structure'
+            sentences.append(
+                f'Price is {direction} its 200-day SMA (₹{round(float(sma200)):,}), indicating {bias}.'
+            )
+        except (TypeError, ValueError):
+            pass
+
+    # 4. 52-week range position
     if price is not None and high_52w is not None and low_52w is not None:
         try:
             p, h, l = float(price), float(high_52w), float(low_52w)
             rng = h - l
             if rng > 0:
                 pos = (p - l) / rng * 100
-                if pos >= 80:
-                    parts.append(f'Price is near its 52-week high (₹{h:,.2f}), trading in the upper {100 - round(pos)}% of the range.')
-                elif pos <= 20:
-                    parts.append(f'Price is near its 52-week low (₹{l:,.2f}), trading in the lower {round(pos)}% of the range.')
+                if pos >= 85:
+                    sentences.append(
+                        f'Trading at {round(pos)}% of its 52-week range, near the annual high of ₹{h:,.0f} — limited upside buffer.'
+                    )
+                elif pos <= 15:
+                    sentences.append(
+                        f'Trading at only {round(pos)}% of its 52-week range, near the annual low of ₹{l:,.0f} — a potential support zone.'
+                    )
                 else:
-                    parts.append(f'Price is at {round(pos)}% of its 52-week range (₹{l:,.2f}–₹{h:,.2f}).')
+                    sentences.append(
+                        f'Price sits at {round(pos)}% of its 52-week range (₹{l:,.0f}–₹{h:,.0f}).'
+                    )
         except (TypeError, ValueError):
             pass
 
+    # If we have 2+ indicator sentences, return top 3 — done.
+    if len(sentences) >= 2:
+        # Optionally append volume if it's significantly unusual
+        if volume is not None and avg_vol is not None and len(sentences) < 3:
+            try:
+                ratio = float(volume) / float(avg_vol)
+                if ratio >= 2.0:
+                    sentences.append(f'Volume is {ratio:.1f}x the average — unusually high activity signals possible institutional accumulation.')
+                elif ratio <= 0.4:
+                    sentences.append(f'Volume is only {ratio:.1f}x average, indicating limited market conviction.')
+            except (TypeError, ValueError, ZeroDivisionError):
+                pass
+        return ' '.join(sentences[:3])
+
+    # 5. Price action fallback — when no historical indicator data is available
     if price is not None and prev_close is not None:
         try:
-            chg_pct = ((float(price) - float(prev_close)) / float(prev_close)) * 100
+            chg_pct   = ((float(price) - float(prev_close)) / float(prev_close)) * 100
             direction = 'up' if chg_pct >= 0 else 'down'
-            parts.append(f'Stock is {direction} {abs(chg_pct):.2f}% from previous close of ₹{float(prev_close):,.2f}.')
+            strength  = 'sharply ' if abs(chg_pct) > 2 else ''
+            sentences.append(
+                f'Stock is {strength}{direction} {abs(chg_pct):.2f}% from previous close of ₹{float(prev_close):,.2f}.'
+            )
+        except (TypeError, ValueError, ZeroDivisionError):
+            pass
+
+    if price is not None and day_high is not None and day_low is not None:
+        try:
+            intra_range = float(day_high) - float(day_low)
+            if float(day_low) > 0:
+                intra_pct = (intra_range / float(day_low)) * 100
+                sentences.append(
+                    f'Intraday range spans ₹{float(day_low):,.2f}–₹{float(day_high):,.2f} ({intra_pct:.1f}% spread).'
+                )
+        except (TypeError, ValueError):
+            pass
+
+    if price is not None and open_price is not None:
+        try:
+            gap_pct = ((float(price) - float(open_price)) / float(open_price)) * 100
+            if abs(gap_pct) > 0.5:
+                direction = 'above' if gap_pct > 0 else 'below'
+                sentences.append(
+                    f'Currently trading {abs(gap_pct):.2f}% {direction} today\'s open (₹{float(open_price):,.2f}).'
+                )
         except (TypeError, ValueError, ZeroDivisionError):
             pass
 
     if volume is not None and avg_vol is not None:
         try:
-            v, av = float(volume), float(avg_vol)
-            if av > 0:
-                ratio = v / av
-                if ratio >= 1.5:
-                    parts.append(f'Volume is {ratio:.1f}x average — elevated activity suggests institutional interest.')
-                elif ratio <= 0.5:
-                    parts.append(f'Volume is below average ({ratio:.1f}x), suggesting low conviction in the move.')
-        except (TypeError, ValueError):
+            ratio = float(volume) / float(avg_vol)
+            if ratio >= 1.5:
+                sentences.append(f'Volume at {ratio:.1f}x average, signalling elevated institutional activity.')
+            elif ratio <= 0.5:
+                sentences.append(f'Volume is light at {ratio:.1f}x average, showing limited market conviction.')
+        except (TypeError, ValueError, ZeroDivisionError):
             pass
 
-    if not parts:
-        return 'Insufficient data for rule-based technical analysis. Please check NSE directly.'
-    return ' '.join(parts)
+    if sentences:
+        return ' '.join(sentences[:3])
+
+    if price is not None:
+        return (
+            f'Live price available at ₹{float(price):,.2f} but insufficient historical data '
+            f'to compute RSI, EMA crossovers, or SMA-200 — check NSE for full chart history.'
+        )
+    return 'Insufficient market data available. Please check NSE directly for current technical levels.'
 
 
 # ── Parallel fetch helpers ────────────────────────────────────
@@ -260,6 +363,20 @@ def get_signal_card(symbol: str, force_refresh: bool = False):
             if nse_quote.get(src_key) is not None:
                 stock_data[dst_key] = nse_quote[src_key]
 
+    # ── Indicator enrichment: if yfinance returned no RSI/EMA, retry get_stock_data ──
+    # This happens when fetch_close_series has < 50 bars but still has a live price.
+    if stock_data.get('rsi') is None and stock_data.get('ema20') is None:
+        try:
+            _tech = get_stock_data(symbol)
+            if 'error' not in _tech:
+                for _k in ('rsi', 'rsi_zone', 'ema20', 'ema50', 'sma200',
+                           'ema_signal', 'high_52w', 'low_52w', 'avg_volume_20d',
+                           'price_30d', 'dates_30d'):
+                    if _tech.get(_k) is not None:
+                        stock_data[_k] = _tech[_k]
+        except Exception:
+            pass
+
     # ── Guard: if price unavailable, build a limited card rather than hard-fail ──
     cp = stock_data.get('current_price')
     _price_unavailable = cp is None or (isinstance(cp, float) and math.isnan(cp)) or (isinstance(cp, (int, float)) and cp <= 0)
@@ -308,7 +425,20 @@ def get_signal_card(symbol: str, force_refresh: bool = False):
         news = []
 
     # ── Rule-based snapshot fallback ─────────────────────────
-    if not card.get('technical_snapshot') or card.get('technical_snapshot') == _FALLBACK_SNAPSHOT:
+    # Triggers when AI is unavailable, returns a generic placeholder, or produces
+    # text containing "unavailable", "insufficient", "unable", or "cannot".
+    _snap = (card.get('technical_snapshot') or '').strip()
+    _snap_lower = _snap.lower()
+    _needs_fallback = (
+        not _snap
+        or _snap == _FALLBACK_SNAPSHOT
+        or 'unavailable' in _snap_lower
+        or 'insufficient' in _snap_lower
+        or 'unable to' in _snap_lower
+        or 'cannot' in _snap_lower
+        or len(_snap) < 40          # suspiciously short — probably a placeholder
+    )
+    if _needs_fallback:
         card['technical_snapshot'] = _rule_based_snapshot(stock_data)
 
     # ── Enrich card ───────────────────────────────────────────
@@ -323,6 +453,11 @@ def get_signal_card(symbol: str, force_refresh: bool = False):
     card['rsi']           = stock_data.get('rsi')
     card['ema_signal']    = stock_data.get('ema_signal')
     card['rsi_zone']      = stock_data.get('rsi_zone')
+    card['ema20']         = stock_data.get('ema20')
+    card['ema50']         = stock_data.get('ema50')
+    card['sma200']        = stock_data.get('sma200')
+    card['high_52w']      = stock_data.get('high_52w')
+    card['low_52w']       = stock_data.get('low_52w')
     card['price_data_quality'] = stock_data.get('price_data_quality')
     card['price_source']  = stock_data.get('price_source')
     card['price_timestamp'] = stock_data.get('price_timestamp')

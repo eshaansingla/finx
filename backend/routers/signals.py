@@ -15,6 +15,52 @@ router = APIRouter()
 _sig_cache: dict = {}   # cache_key → {'data': list, 'ts': float}
 _SIG_CACHE_TTL = 4.5    # seconds — expires just before 5 s frontend poll; quote cache (15 s) always warm
 
+# Technical enrichment cache — prevents repeated get_stock_data calls per symbol
+# Each entry lives 5 min; get_stock_data itself uses SQLite caches so is fast when warm
+_tech_enrich_cache: dict = {}   # symbol → {'data': dict, 'ts': float}
+_TECH_ENRICH_TTL = 300          # 5 minutes
+
+import json as _json
+
+def _get_tech_for_symbol(symbol: str) -> dict:
+    """
+    Returns technical indicators for a symbol.
+    Priority: memory cache → card_cache (SQLite) → get_stock_data (uses SQLite caches).
+    Never raises — returns empty dict on any failure.
+    """
+    now = time.time()
+    cached = _tech_enrich_cache.get(symbol)
+    if cached and (now - cached['ts']) < _TECH_ENRICH_TTL:
+        return cached['data']
+
+    KEYS = ('rsi', 'rsi_zone', 'ema_signal', 'ema20', 'ema50', 'sma200', 'high_52w', 'low_52w')
+
+    # 1) Try card_cache first — pure SQLite, sub-millisecond
+    try:
+        row = db_fetchone('SELECT card_json FROM card_cache WHERE symbol=?', (symbol,))
+        if row and row.get('card_json'):
+            card = _json.loads(row['card_json'])
+            data = {k: card.get(k) for k in KEYS}
+            if any(v is not None for v in data.values()):
+                _tech_enrich_cache[symbol] = {'data': data, 'ts': now}
+                return data
+    except Exception:
+        pass
+
+    # 2) Fall back to get_stock_data — uses close_series_cache (SQLite), fast when warm
+    try:
+        tech = get_stock_data(symbol)
+        if 'error' not in tech:
+            data = {k: tech.get(k) for k in KEYS}
+            _tech_enrich_cache[symbol] = {'data': data, 'ts': now}
+            return data
+    except Exception:
+        pass
+
+    # 3) Cache empty result so we don't retry every poll
+    _tech_enrich_cache[symbol] = {'data': {}, 'ts': now}
+    return {}
+
 
 @router.get('/signals')
 def get_signals(
@@ -58,6 +104,22 @@ def get_signals(
                     sig['percent_change'] = q['percent_change'] if q else None
             except Exception as e:
                 print(f'[Signals] Price enrichment failed: {e}')
+
+        # Enrich with technical indicators (card_cache → get_stock_data fallback)
+        if signals:
+            for sig in signals:
+                sym = sig.get('symbol')
+                if not sym:
+                    continue
+                tech = _get_tech_for_symbol(sym)
+                sig['rsi']        = tech.get('rsi')
+                sig['rsi_zone']   = tech.get('rsi_zone')
+                sig['ema_signal'] = tech.get('ema_signal')
+                sig['ema20']      = tech.get('ema20')
+                sig['ema50']      = tech.get('ema50')
+                sig['sma200']     = tech.get('sma200')
+                sig['high_52w']   = tech.get('high_52w')
+                sig['low_52w']    = tech.get('low_52w')
 
         # Replace stale "temporarily unavailable" explanations with rule-based analysis
         _STALE = 'Signal analysis temporarily unavailable.'

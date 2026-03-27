@@ -27,6 +27,43 @@ const SENTIMENT = {
 
 const fmt    = (v) => v != null ? `₹${Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'
 const fmtNum = (v) => v != null ? Number(v).toLocaleString('en-IN') : '—'
+const fmtK   = (v) => v != null ? `₹${Number(v).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '—'
+
+function emaBgCls(signal) {
+  if (!signal) return 'bg-gray-200 dark:bg-gray-700/60 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700/30'
+  if (signal.includes('bullish')) return 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/40'
+  if (signal.includes('bearish')) return 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800/40'
+  return 'bg-gray-200 dark:bg-gray-700/60 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700/30'
+}
+
+function RangeBar({ low, high, current }) {
+  if (low == null || high == null || current == null) return null
+  const range = high - low
+  if (range <= 0) return null
+  const pos = Math.min(100, Math.max(0, ((current - low) / range) * 100))
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-[10px] text-gray-400 uppercase tracking-wider">52-Week Range</p>
+        <p className="text-[10px] text-gray-400">{pos.toFixed(0)}% of range</p>
+      </div>
+      <div className="relative h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-visible">
+        <div
+          className="absolute inset-y-0 left-0 bg-gradient-to-r from-red-400 via-amber-400 to-emerald-500 rounded-full"
+          style={{ width: '100%', opacity: 0.35 }}
+        />
+        <div
+          className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-blue-600 rounded-full border-2 border-white dark:border-gray-900 shadow"
+          style={{ left: `calc(${pos}% - 6px)` }}
+        />
+      </div>
+      <div className="flex justify-between mt-1">
+        <span className="text-[10px] text-gray-400">{fmtK(low)}</span>
+        <span className="text-[10px] text-gray-400">{fmtK(high)}</span>
+      </div>
+    </div>
+  )
+}
 
 function MiniChart({ prices = [], changePct = 0 }) {
   if (!prices || prices.length < 2) return null
@@ -60,8 +97,8 @@ function StatBox({ label, value, cls = '' }) {
 }
 
 export default function SignalCard({ card }) {
-  const [winRate, setWinRate] = useState(null) // { pct, n } | null
-  const [priceFlash, setPriceFlash] = useState(null) // 'up' | 'down' | null
+  const [winRate, setWinRate] = useState(null)
+  const [priceFlash, setPriceFlash] = useState(null)
   const prevPriceRef = useRef(null)
 
   useEffect(() => {
@@ -74,7 +111,6 @@ export default function SignalCard({ card }) {
       .catch(() => {})
   }, [card?.symbol, card?.ema_signal])
 
-  // Flash price green/red whenever live price ticks
   useEffect(() => {
     const curr = card?.current_price
     const prev = prevPriceRef.current
@@ -91,6 +127,18 @@ export default function SignalCard({ card }) {
   const s    = SENTIMENT[card.sentiment] || SENTIMENT.neutral
   const Icon = s.icon
   const isUp = (card.change_pct ?? 0) >= 0
+
+  const rsiVal = card.rsi != null ? Number(card.rsi) : null
+  const rsiBg  = rsiVal == null ? ''
+    : rsiVal >= 70 ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800/40'
+    : rsiVal <= 30 ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/40'
+    : 'bg-gray-200 dark:bg-gray-700/60 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700/30'
+
+  const sma200bg = (card.sma200 != null && card.current_price != null)
+    ? (card.current_price >= card.sma200
+        ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/40'
+        : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800/40')
+    : ''
 
   return (
     <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 space-y-5 relative shadow-sm dark:shadow-xl">
@@ -155,30 +203,59 @@ export default function SignalCard({ card }) {
         </div>
       )}
 
-      {/* Technical Snapshot */}
-      <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700/20 rounded-xl p-4 space-y-2">
-        <div className="flex items-center gap-2 mb-1">
+      {/* Technical Analysis */}
+      <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700/20 rounded-xl p-4 space-y-3">
+        <div className="flex items-center gap-2">
           <BarChart3 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-          <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Technical Snapshot</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Technical Analysis</p>
         </div>
+
         <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{card.technical_snapshot || '—'}</p>
-        {(card.rsi != null || card.ema_signal) && (
-          <div className="flex flex-wrap gap-2 pt-1 text-xs">
-            {card.rsi != null && (
-              <span className="bg-gray-200 dark:bg-gray-700/60 text-gray-700 dark:text-gray-300 rounded-lg px-2.5 py-1">
-                RSI <span className="font-semibold ml-1">{card.rsi}</span>
+
+        {/* Indicator pills */}
+        {(rsiVal != null || card.ema_signal || card.sma200 != null) && (
+          <div className="flex flex-wrap gap-2 text-xs">
+            {rsiVal != null && (
+              <span className={`rounded-lg px-2.5 py-1 font-medium border ${rsiBg}`}>
+                RSI {rsiVal}
                 {card.rsi_zone && (
-                  <span className="text-gray-500 ml-1 capitalize">({card.rsi_zone.replace('_', ' ')})</span>
+                  <span className="opacity-70 ml-1 capitalize">· {card.rsi_zone.replace(/_/g, ' ')}</span>
                 )}
               </span>
             )}
             {card.ema_signal && (
-              <span className="bg-gray-200 dark:bg-gray-700/60 text-gray-700 dark:text-gray-300 rounded-lg px-2.5 py-1">
-                EMA <span className="font-semibold ml-1 capitalize">{card.ema_signal.replace('_', ' ')}</span>
+              <span className={`rounded-lg px-2.5 py-1 font-medium border ${emaBgCls(card.ema_signal)}`}>
+                EMA <span className="capitalize">{card.ema_signal.replace(/_/g, ' ')}</span>
+              </span>
+            )}
+            {card.sma200 != null && card.current_price != null && (
+              <span className={`rounded-lg px-2.5 py-1 font-medium border ${sma200bg}`}>
+                {card.current_price >= card.sma200 ? '▲' : '▼'} SMA-200 {fmtK(card.sma200)}
               </span>
             )}
           </div>
         )}
+
+        {/* EMA-20 / EMA-50 levels */}
+        {(card.ema20 != null || card.ema50 != null) && (
+          <div className="grid grid-cols-2 gap-2">
+            {card.ema20 != null && (
+              <div className="bg-white dark:bg-gray-900/60 rounded-lg px-3 py-2 border border-gray-100 dark:border-gray-700/30">
+                <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">EMA-20</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{fmt(card.ema20)}</p>
+              </div>
+            )}
+            {card.ema50 != null && (
+              <div className="bg-white dark:bg-gray-900/60 rounded-lg px-3 py-2 border border-gray-100 dark:border-gray-700/30">
+                <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">EMA-50</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{fmt(card.ema50)}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 52-week range bar */}
+        <RangeBar low={card.low_52w} high={card.high_52w} current={card.current_price} />
       </div>
 
       {/* News Impact — hidden when AI returned the fallback */}
@@ -225,7 +302,7 @@ export default function SignalCard({ card }) {
         </div>
       )}
 
-      {/* News Links — hidden when empty */}
+      {/* News Links */}
       {card.news?.length > 0 && (
         <div className="space-y-1">
           <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold mb-2">Recent News</p>

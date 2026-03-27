@@ -104,7 +104,7 @@ def init_db():
             updated_at   TEXT DEFAULT (datetime('now'))
         );
 
-        -- Track Gemini usage (free-tier quota management).
+        -- Track AI usage (kept for legacy compatibility).
         CREATE TABLE IF NOT EXISTS gemini_usage (
             usage_date TEXT PRIMARY KEY,
             call_count INTEGER NOT NULL DEFAULT 0,

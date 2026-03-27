@@ -13,9 +13,75 @@ const SIG_ICON = {
   neutral: <Minus        className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />,
 }
 
+function emaPillCls(signal) {
+  if (!signal) return 'bg-gray-100 dark:bg-gray-700/40 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700/30'
+  if (signal.includes('bullish')) return 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/40'
+  if (signal.includes('bearish')) return 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800/40'
+  return 'bg-gray-100 dark:bg-gray-700/40 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700/30'
+}
+
+function TechPills({ s }) {
+  const hasAny = s.rsi != null || s.ema_signal || s.ema20 != null || s.ema50 != null
+    || s.sma200 != null || s.high_52w != null || s.low_52w != null
+  if (!hasAny) return null
+
+  const rsiVal = s.rsi != null ? Number(s.rsi) : null
+  const rsiBg  = rsiVal == null ? ''
+    : rsiVal >= 70 ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800/40'
+    : rsiVal <= 30 ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/40'
+    : 'bg-gray-100 dark:bg-gray-700/40 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700/30'
+
+  const sma200Bg = (s.sma200 != null && s.price != null)
+    ? (s.price >= s.sma200
+        ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/40'
+        : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800/40')
+    : 'bg-gray-100 dark:bg-gray-700/40 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700/30'
+
+  return (
+    <div className="flex flex-wrap gap-1.5 text-xs pt-1">
+      {rsiVal != null && (
+        <span className={`rounded-md px-2 py-1 font-medium border ${rsiBg}`}>
+          RSI {rsiVal}
+          {s.rsi_zone && <span className="opacity-70 ml-1 capitalize">· {s.rsi_zone.replace(/_/g, ' ')}</span>}
+        </span>
+      )}
+      {s.ema_signal && (
+        <span className={`rounded-md px-2 py-1 font-medium border capitalize ${emaPillCls(s.ema_signal)}`}>
+          EMA {s.ema_signal.replace(/_/g, ' ')}
+        </span>
+      )}
+      {s.sma200 != null && (
+        <span className={`rounded-md px-2 py-1 font-medium border ${sma200Bg}`}>
+          {s.price != null ? (s.price >= s.sma200 ? '▲' : '▼') : ''} SMA-200 ₹{Number(s.sma200).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+        </span>
+      )}
+      {s.ema20 != null && (
+        <span className="rounded-md px-2 py-1 bg-gray-100 dark:bg-gray-700/40 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700/30">
+          EMA-20 ₹{Number(s.ema20).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+        </span>
+      )}
+      {s.ema50 != null && (
+        <span className="rounded-md px-2 py-1 bg-gray-100 dark:bg-gray-700/40 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700/30">
+          EMA-50 ₹{Number(s.ema50).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+        </span>
+      )}
+      {s.high_52w != null && (
+        <span className="rounded-md px-2 py-1 bg-gray-100 dark:bg-gray-700/40 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700/30">
+          52W H ₹{Number(s.high_52w).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+        </span>
+      )}
+      {s.low_52w != null && (
+        <span className="rounded-md px-2 py-1 bg-gray-100 dark:bg-gray-700/40 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700/30">
+          52W L ₹{Number(s.low_52w).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+        </span>
+      )}
+    </div>
+  )
+}
+
 function SignalItem({ s }) {
   const [open, setOpen] = useState(false)
-  const [flash, setFlash] = useState(null) // 'up' | 'down' | null
+  const [flash, setFlash] = useState(null)
   const prevPriceRef = useRef(null)
   const risk   = s.risk_level || 'medium'
   const styles = RISK_STYLES[risk] || RISK_STYLES.medium
@@ -86,6 +152,9 @@ function SignalItem({ s }) {
           {s.explanation && (
             <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{s.explanation}</p>
           )}
+
+          <TechPills s={s} />
+
           {s.key_observation && (
             <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-800/30 rounded-lg px-3 py-2">
               <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">

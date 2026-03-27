@@ -2,7 +2,7 @@
 import json
 from datetime import datetime, timedelta
 from database import db_fetchall
-from services.gpt import gemini_call, load_prompt
+from services.gpt import groq_call, load_prompt
 
 def generate_market_minutes() -> dict:
     """
@@ -27,7 +27,7 @@ def generate_market_minutes() -> dict:
             
         prompt = prompt_template.format(radar_signals=formatted_signals)
         # Using a slightly higher temperature for creative, punchy synthesis
-        script = gemini_call(prompt, max_tokens=256, temperature=0.5)
+        script = groq_call(prompt, max_tokens=256, temperature=0.5)
         
         if not script:
             script = "Welcome to Fin-X Market Minutes. We are currently processing the latest signals and will be back with your brief shortly."

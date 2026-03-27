@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import json
 from services.indicators import add_ns_suffix, compute_rsi_manual
 from services.news_fetcher import get_stock_news
-from services.gpt import gemini_call, load_prompt, parse_json_response
+from services.gpt import groq_call, load_prompt, parse_json_response
 from database import db_fetchall
 
 SECTORS = {
@@ -173,7 +173,7 @@ def analyze_management_tone(symbol: str) -> dict:
             prompt_template = "Analyze the tone shift from these news snippets: {news_snippets}. Return JSON with 'tone_shift_score' (-1.0 to 1.0) and 'explanation'."
             
         prompt = prompt_template.format(news_snippets=json.dumps(snippets, indent=2))
-        raw = gemini_call(prompt, json_mode=True, max_tokens=256)
+        raw = groq_call(prompt, json_mode=True, max_tokens=256)
         
         parsed = parse_json_response(raw, fallback=_fallback)
         parsed["symbol"] = symbol

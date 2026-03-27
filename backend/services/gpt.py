@@ -6,11 +6,13 @@ load_dotenv(override=True)
 from database import db_fetchall, db_fetchone, db_execute
 
 # ── API keys ─────────────────────────────────────────────────
-LLAMA_API_KEY = os.getenv("LLAMA_API_KEY", "").strip()
+# Primary: Groq (key starts with "gsk_") or OpenRouter (key starts with "sk-or-")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
+LLAMA_API_KEY = os.getenv("LLAMA_API_KEY", "").strip() or GROQ_API_KEY
 
 # Provider defaults:
-# - OpenRouter: https://openrouter.ai/api/v1, key typically starts with "sk-or-"
-# - Groq (OpenAI-compatible): https://api.groq.com/openai/v1, key typically starts with "gsk_"
+# - Groq (OpenAI-compatible): https://api.groq.com/openai/v1, key starts with "gsk_"
+# - OpenRouter: https://openrouter.ai/api/v1, key starts with "sk-or-"
 _env_base = os.getenv("LLAMA_BASE_URL", "").strip()
 _env_model = os.getenv("LLAMA_MODEL", "").strip()
 
@@ -31,48 +33,8 @@ if not _env_model:
 else:
     LLAMA_MODEL = _env_model
 
-# Kept as fallback only (if LLAMA_API_KEY isn't set)
+# Kept as fallback only (if GROQ/LLAMA key isn't set)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
-
-# Gemini free-tier quota management (default values from project notes).
-GEMINI_DAILY_LIMIT = int(os.getenv('GEMINI_DAILY_LIMIT', '20'))
-# When used-calls >= this threshold, we switch to OpenAI to avoid Gemini exhaustion.
-GEMINI_NEAR_THRESHOLD = int(os.getenv('GEMINI_NEAR_THRESHOLD', '15'))
-
-def _utc_today_str() -> str:
-    return datetime.datetime.utcnow().date().isoformat()
-
-def _get_gemini_call_count_today() -> int:
-    """Returns Gemini call_count for today (UTC). Returns 0 if unavailable."""
-    today = _utc_today_str()
-    try:
-        row = db_fetchone('SELECT call_count FROM gemini_usage WHERE usage_date=?', (today,))
-        if row and row.get('call_count') is not None:
-            return int(row.get('call_count') or 0)
-        # Ensure row exists for stable increments.
-        db_execute(
-            'INSERT OR IGNORE INTO gemini_usage (usage_date, call_count) VALUES (?, 0)',
-            (today,)
-        )
-        row = db_fetchone('SELECT call_count FROM gemini_usage WHERE usage_date=?', (today,))
-        return int(row.get('call_count') or 0) if row else 0
-    except Exception:
-        return 0
-
-def _increment_gemini_call_count_today() -> None:
-    """Atomically increments Gemini call_count for today (UTC)."""
-    today = _utc_today_str()
-    try:
-        db_execute(
-            '''UPDATE gemini_usage
-               SET call_count = call_count + 1,
-                   updated_at = datetime('now')
-               WHERE usage_date=?''',
-            (today,)
-        )
-    except Exception:
-        # Best-effort only; quota tracking should never crash AI calls.
-        pass
 
 # ── Prompt loader ────────────────────────────────────────────
 PROMPTS_DIR = Path(__file__).parent.parent / 'prompts'
@@ -92,7 +54,7 @@ CARD_PROMPT   = load_prompt('card.txt')
 
 # ── OpenAI fallback ──────────────────────────────────────────
 def _openai_generate(prompt: str, max_tokens: int = 1024, temperature: float = 0.3) -> str:
-    """Call OpenAI gpt-4o-mini as fallback when Gemini is unavailable."""
+    """Call OpenAI gpt-4o-mini as fallback when Groq is unavailable."""
     if not OPENAI_API_KEY:
         print('[WARN] OPENAI_API_KEY missing — cannot use OpenAI fallback')
         raise RuntimeError('No AI API key configured')
@@ -186,23 +148,25 @@ def _llama_chat(messages: list, last_content: str) -> str:
         return _openai_chat(messages, last_content)
 
 
-# ── Legacy name kept for compatibility ───────────────────────
-def gemini_call(
+# ── Primary AI call (Groq / OpenRouter / OpenAI-compatible) ──
+def groq_call(
     prompt:       str,
     json_mode:    bool = False,
     max_tokens:   int  = 1024,
     temperature:  float = 0.3,
 ) -> str:
     """
-    Kept function name for compatibility across the codebase.
-    Now uses Llama-3.3-70B (OpenAI-compatible). Falls back to OpenAI if needed.
+    Primary AI call using Groq (Llama-3.3-70B). Falls back to OpenAI if needed.
+    json_mode is best-effort (depends on provider support).
     """
-    # json_mode is best-effort (depends on provider support). We keep it for callers.
     return _llama_generate(prompt, max_tokens=max_tokens, temperature=temperature)
+
+# Alias for backward compatibility
+gemini_call = groq_call
 
 # ── Safe JSON parser ─────────────────────────────────────────
 def parse_json_response(text: str, fallback: dict = None) -> dict:
-    """Parses Gemini/OpenAI JSON response safely. Returns fallback on failure."""
+    """Parses AI JSON response safely. Returns fallback on failure."""
     if not text:
         return fallback or {}
     try:
@@ -226,8 +190,36 @@ def parse_json_response(text: str, fallback: dict = None) -> dict:
         return fallback or {'error': 'Parse failed'}
 
 # ── Live context builder ─────────────────────────────────────
+def _get_card_tech(symbol: str) -> dict:
+    """Fast card_cache lookup for technical fields. Never raises."""
+    try:
+        row = db_fetchone('SELECT card_json FROM card_cache WHERE symbol=?', (symbol,))
+        if row and row.get('card_json'):
+            card = json.loads(row['card_json'])
+            return {
+                'rsi':              card.get('rsi'),
+                'rsi_zone':         card.get('rsi_zone'),
+                'ema_signal':       card.get('ema_signal'),
+                'ema20':            card.get('ema20'),
+                'ema50':            card.get('ema50'),
+                'sma200':           card.get('sma200'),
+                'high_52w':         card.get('high_52w'),
+                'low_52w':          card.get('low_52w'),
+                'technical_snapshot': card.get('technical_snapshot'),
+                'sentiment':        card.get('sentiment'),
+                'sentiment_score':  card.get('sentiment_score'),
+            }
+    except Exception:
+        pass
+    return {}
+
+
 def build_chat_context() -> str:
-    """Builds live NSE context injected into every chat message."""
+    """
+    Builds live NSE context injected into every chat message.
+    Includes: Nifty snapshot, recent Opportunity Radar signals with full technical
+    data, recently viewed stock cards (from card_cache), and ET Markets headlines.
+    """
     try:
         from services.indicators import get_nifty_snapshot
         from services.news_fetcher import get_market_headlines
@@ -235,19 +227,89 @@ def build_chat_context() -> str:
         nifty     = get_nifty_snapshot()
         headlines = get_market_headlines(4)
         signals   = db_fetchall(
-            'SELECT symbol, signal_type, explanation '
-            'FROM signals ORDER BY created_at DESC LIMIT 3'
+            'SELECT symbol, signal_type, explanation, risk_level, confidence '
+            'FROM signals ORDER BY created_at DESC LIMIT 5'
         )
 
         today = datetime.date.today().isoformat()
         ctx   = f"\n\n--- LIVE NSE CONTEXT ({today}) ---\n"
         ctx  += f"Nifty 50: {nifty.get('nifty50', 'N/A')} "
-        ctx  += f"({nifty.get('nifty50_change_pct', 'N/A')}% today)\n"
-        ctx  += "\nOpportunity Radar — recent signals:\n"
+        ctx  += f"({nifty.get('nifty50_change_pct', 'N/A')}% today, "
+        ctx  += f"direction: {nifty.get('nifty50_direction', 'N/A')})\n"
 
+        # ── Opportunity Radar signals ─────────────────────────
+        ctx += "\nOpportunity Radar — recent bulk/block deal signals:\n"
         for i, s in enumerate(signals, 1):
-            snippet = (s.get('explanation') or '')[:120]
-            ctx += f"{i}. {s['symbol']} [{(s.get('signal_type') or 'neutral').upper()}]: {snippet}...\n"
+            sym      = s['symbol']
+            sig_type = (s.get('signal_type') or 'neutral').upper()
+            risk     = s.get('risk_level', 'medium')
+            snippet  = (s.get('explanation') or '')[:120]
+
+            tech = _get_card_tech(sym)
+            tech_parts = []
+            if tech.get('rsi') is not None:
+                zone = (tech.get('rsi_zone') or '').replace('_', ' ')
+                tech_parts.append(f"RSI {tech['rsi']} ({zone})")
+            if tech.get('ema_signal'):
+                tech_parts.append(f"EMA {tech['ema_signal'].replace('_', ' ')}")
+            if tech.get('sma200') is not None:
+                current_price_proxy = tech.get('ema20') or 0
+                trend = ('above SMA-200 — bullish structure'
+                         if current_price_proxy > tech['sma200']
+                         else 'below SMA-200 — bearish structure')
+                tech_parts.append(trend)
+            if tech.get('technical_snapshot'):
+                # Include the full AI/rule-based snapshot for richer context
+                ctx += f"{i}. {sym} [{sig_type}] risk:{risk}\n"
+                ctx += f"   Technicals: {tech['technical_snapshot'][:160]}\n"
+                ctx += f"   Signal: {snippet[:100]}...\n"
+            else:
+                tech_str = ' | '.join(tech_parts)
+                ctx += f"{i}. {sym} [{sig_type}] risk:{risk}"
+                if tech_str:
+                    ctx += f" — {tech_str}"
+                ctx += f"\n   {snippet[:100]}...\n"
+
+        # ── Recently viewed stock cards (past 30 min from card_cache) ──
+        try:
+            recent_cards = db_fetchall(
+                "SELECT symbol, card_json FROM card_cache "
+                "WHERE expires_at > datetime('now') "
+                "ORDER BY expires_at DESC LIMIT 6"
+            )
+            if recent_cards:
+                ctx += "\nRecently viewed stocks (live card data):\n"
+                for row in recent_cards:
+                    sym = row['symbol']
+                    if not row.get('card_json'):
+                        continue
+                    try:
+                        card = json.loads(row['card_json'])
+                        price   = card.get('current_price')
+                        chg     = card.get('change_pct')
+                        rsi     = card.get('rsi')
+                        ema_sig = card.get('ema_signal', '')
+                        sma200  = card.get('sma200')
+                        snap    = card.get('technical_snapshot', '')
+
+                        price_str = f"₹{price}" if price else "N/A"
+                        chg_str   = f"{'+' if (chg or 0) >= 0 else ''}{chg}%" if chg is not None else ""
+                        rsi_str   = f"RSI {rsi}" if rsi else ""
+                        ema_str   = ema_sig.replace('_', ' ') if ema_sig else ""
+                        sma_str   = (f"{'above' if price and price >= sma200 else 'below'} SMA-200 ₹{round(sma200):,}"
+                                     if sma200 and price else "")
+                        indicators = " | ".join(filter(None, [rsi_str, ema_str, sma_str]))
+
+                        ctx += f"• {sym}: {price_str} {chg_str}"
+                        if indicators:
+                            ctx += f" | {indicators}"
+                        ctx += "\n"
+                        if snap and len(snap) > 30:
+                            ctx += f"  Analysis: {snap[:180]}\n"
+                    except Exception:
+                        continue
+        except Exception:
+            pass
 
         ctx += "\nLatest ET Markets headlines:\n"
         for h in headlines:
@@ -261,12 +323,13 @@ def build_chat_context() -> str:
 # ── Stock context injector ───────────────────────────────────
 def _build_stock_context(user_message: str) -> str:
     """
-    Detect NSE symbols in user message, fetch live quotes, and return
-    an injected context block. Returns empty string if nothing found
+    Detect NSE symbols in user message, fetch live quotes + technical indicators,
+    and return an injected context block. Returns empty string if nothing found
     or API fails — never raises.
     """
     try:
         from services.nse_service import extract_symbols_from_text, get_quote
+        from services.indicators import get_stock_data, interpret_rsi
         # uppercase so "reliance" → "RELIANCE" is detected
         candidates = extract_symbols_from_text(user_message.upper())
         if not candidates:
@@ -281,19 +344,66 @@ def _build_stock_context(user_message: str) -> str:
                 chg   = q.get('change')
                 lines = [
                     f"Stock: {q['symbol']}",
-                    f"Price: {q['price']}",
+                    f"Price: ₹{q['price']}",
                     f"Change: {sign}{chg} ({sign}{pct}%)",
                 ]
-                if q.get('high')       is not None: lines.append(f"High: {q['high']}")
-                if q.get('low')        is not None: lines.append(f"Low: {q['low']}")
-                if q.get('prev_close') is not None: lines.append(f"Prev Close: {q['prev_close']}")
+                if q.get('high')       is not None: lines.append(f"Day High: ₹{q['high']}")
+                if q.get('low')        is not None: lines.append(f"Day Low: ₹{q['low']}")
+                if q.get('prev_close') is not None: lines.append(f"Prev Close: ₹{q['prev_close']}")
                 if q.get('volume')     is not None: lines.append(f"Volume: {q['volume']:,}")
+
+                # Enrich with technical indicators — card_cache first (fast), then live fetch
+                try:
+                    tech = {}
+                    # Priority 1: card_cache (sub-ms SQLite read, has all indicators + snapshot)
+                    cached_tech = _get_card_tech(sym)
+                    if cached_tech.get('rsi') is not None or cached_tech.get('ema20') is not None:
+                        tech = cached_tech
+                    else:
+                        # Priority 2: live get_stock_data (slower, uses close_series_cache)
+                        fresh = get_stock_data(sym)
+                        if 'error' not in fresh:
+                            tech = fresh
+
+                    rsi      = tech.get('rsi')
+                    ema_signal = tech.get('ema_signal', '')
+                    ema20    = tech.get('ema20')
+                    ema50    = tech.get('ema50')
+                    sma200   = tech.get('sma200')
+                    high_52w = tech.get('high_52w')
+                    low_52w  = tech.get('low_52w')
+                    rsi_zone = tech.get('rsi_zone') or interpret_rsi(rsi)
+                    snapshot = tech.get('technical_snapshot', '')
+
+                    if rsi is not None or ema20 is not None or sma200 is not None:
+                        lines.append("--- Technical Indicators ---")
+                        if rsi is not None:
+                            lines.append(f"RSI(14): {rsi} ({rsi_zone.replace('_', ' ')})")
+                        if ema20 is not None:
+                            lines.append(f"EMA-20: ₹{ema20}")
+                        if ema50 is not None:
+                            lines.append(f"EMA-50: ₹{ema50}")
+                        if ema_signal:
+                            lines.append(f"EMA Signal: {ema_signal.replace('_', ' ')}")
+                        if sma200 is not None:
+                            price_val = q.get('price')
+                            sma_dir = ('above' if price_val and float(price_val) >= float(sma200) else 'below')
+                            lines.append(f"SMA-200: ₹{sma200} (price is {sma_dir} — {'bullish' if sma_dir == 'above' else 'bearish'} long-term structure)")
+                        if high_52w is not None:
+                            lines.append(f"52W High: ₹{high_52w}")
+                        if low_52w is not None:
+                            lines.append(f"52W Low: ₹{low_52w}")
+                        if snapshot and len(snapshot) > 30:
+                            lines.append(f"Technical Summary: {snapshot[:200]}")
+                except Exception:
+                    pass  # technical data is optional — never block the chat
+
                 stock_blocks.append('\n'.join(lines))
 
         if not stock_blocks:
             return ''
 
-        return '\n\n[LIVE NSE DATA]\n' + '\n\n'.join(stock_blocks) + '\n[END LIVE DATA]'
+        return '\n\n[LIVE NSE DATA + TECHNICAL ANALYSIS]\n' + '\n\n'.join(stock_blocks) + '\n[END LIVE DATA]'
     except Exception as e:
         print(f'[StockContext] Error: {e}')
         return ''
@@ -301,7 +411,7 @@ def _build_stock_context(user_message: str) -> str:
 # ── Rule-based signal engine ──────────────────────────────────
 def _rule_based_signal_explanation(deal: dict, stock_data: dict) -> dict:
     """
-    Rule-based signal generation used when both Gemini + OpenAI are unavailable.
+    Rule-based signal generation used when both Groq + OpenAI are unavailable.
     The spec intentionally uses *only* RSI + EMA to derive `signal_type`.
     """
     symbol     = (deal.get('symbol') or stock_data.get('symbol') or 'UNKNOWN').upper()
@@ -343,19 +453,19 @@ def _rule_based_signal_explanation(deal: dict, stock_data: dict) -> dict:
     if signal_type == 'bullish':
         explanation = (
             f'{rsi_part} (oversold) and {ema_part} with bullish setup. '
-            f'Rule-based fallback used because Gemini/OpenAI quota is exhausted. '
+            f'Rule-based fallback used because Groq/OpenAI is temporarily unavailable. '
             f'No AI provider available for deeper analysis.'
         )
     elif signal_type == 'bearish':
         explanation = (
             f'{rsi_part} (overbought). {ema_part}. '
-            f'Rule-based fallback used because Gemini/OpenAI quota is exhausted. '
+            f'Rule-based fallback used because Groq/OpenAI is temporarily unavailable. '
             f'No AI provider available for deeper analysis.'
         )
     else:
         explanation = (
             f'{rsi_part}. {ema_part}. '
-            f'Rule-based fallback used because Gemini/OpenAI quota is exhausted. '
+            f'Rule-based fallback used because Groq/OpenAI is temporarily unavailable. '
             f'No AI provider available for deeper analysis.'
         )
 
@@ -389,7 +499,7 @@ def explain_signal(deal: dict, stock_data: dict) -> dict:
             deal_json  = json.dumps(deal,       indent=2),
             price_json = json.dumps(stock_data, indent=2),
         )
-        raw    = gemini_call(prompt, json_mode=True, max_tokens=512)
+        raw    = groq_call(prompt, json_mode=True, max_tokens=512)
         result = parse_json_response(raw, fallback=None)
         if result and result.get('explanation') and \
                 result['explanation'] not in ('Signal analysis temporarily unavailable.', ''):
@@ -426,7 +536,7 @@ def generate_signal_card(symbol: str, stock_data: dict, news: list) -> dict:
             price_json     = json.dumps(stock_data, indent=2),
             news_headlines = news_text,
         )
-        raw = gemini_call(prompt, json_mode=True, max_tokens=768)
+        raw = groq_call(prompt, json_mode=True, max_tokens=768)
         return parse_json_response(raw, fallback=_fallback)
     except Exception as e:
         print(f'[AI] generate_signal_card error: {e}')
