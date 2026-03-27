@@ -7,8 +7,8 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![React](https://img.shields.io/badge/React-18.3-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
-[![Gemini](https://img.shields.io/badge/Gemini_2.5_Flash-AI_Primary-8E75B2?style=for-the-badge&logo=google&logoColor=white)](https://deepmind.google/technologies/gemini/)
-[![GPT-4o](https://img.shields.io/badge/GPT--4o-AI_Fallback-412991?style=for-the-badge&logo=openai&logoColor=white)](https://openai.com)
+[![Gemini](https://img.shields.io/badge/Gemini_2.5_Flash_Lite-AI_Primary-8E75B2?style=for-the-badge&logo=google&logoColor=white)](https://deepmind.google/technologies/gemini/)
+[![GPT-4o mini](https://img.shields.io/badge/GPT--4o_mini-AI_Fallback-412991?style=for-the-badge&logo=openai&logoColor=white)](https://openai.com)
 [![Tests](https://img.shields.io/badge/Tests-22_passing-22c55e?style=for-the-badge&logo=pytest&logoColor=white)](#-testing)
 [![Auth](https://img.shields.io/badge/Auth-JWT_+_Google_OAuth-F59E0B?style=for-the-badge&logo=jsonwebtokens&logoColor=black)](https://jwt.io)
 [![ET Hackathon](https://img.shields.io/badge/ET_Hackathon-AI_Fintech_Track-FF6B00?style=for-the-badge)](https://economictimes.indiatimes.com)
@@ -74,8 +74,6 @@ surfacing what it all *means* — in plain language, before the broader market r
 ### Light Mode — Full Theme Support
 > Complete dark/light toggle across all pages. Same live data, two aesthetics.
 
-<img src="screenshots/radar-light.png" width="100%" alt="Radar Light"/>
-
 <img src="screenshots/signal-card-light.png" width="100%" alt="Signal Card Light"/>
 
 ---
@@ -130,8 +128,16 @@ Email + password with Brevo transactional verification, Google OAuth 2.0, JWT ac
 </td>
 <td width="50%" valign="top">
 
-### 📡 Live WebSocket Feed
-Real-time price streaming per symbol. Market movers (gainers, losers, cheapest, most expensive), open/closed status, OHLCV chart data — all live, low-latency, WebSocket-powered.
+### 🔍 Instant Smart Search
+Debounced 7-step fuzzy NSE search across 100+ symbols with dropdown suggestions and keyboard navigation. Two-phase loading: live price appears in &lt;200 ms from scheduler-warmed cache, full AI card follows seamlessly. Re-visiting a stock within 5 min is instant — no network call.
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+### 📡 Live Market Feed
+Real-time price streaming per symbol via WebSocket (`/market/ws/{symbol}`). Market movers (gainers, losers, cheapest, most expensive) polled every 5 s during market hours. IST open/closed awareness with adaptive polling rates across all components.
 
 </td>
 </tr>
@@ -172,12 +178,12 @@ Real-time price streaming per symbol. Market movers (gainers, losers, cheapest, 
 ║   │  │                                                     │  │   ║
 ║   │  │  Tier 1  Gemini 2.5 Flash Lite  ←  Primary         │  │   ║
 ║   │  │             ↓ (on quota / error)                    │  │   ║
-║   │  │  Tier 2  GPT-4o                 ←  Fallback         │  │   ║
+║   │  │  Tier 2  GPT-4o mini            ←  Fallback         │  │   ║
 ║   │  │             ↓ (on quota / error)                    │  │   ║
 ║   │  │  Tier 3  Rule Engine            ←  Always-on        │  │   ║
 ║   │  └────────────────────────────────────────────────────┘  │   ║
 ║   │                                                           │   ║
-║   │  APScheduler (hourly radar refresh)                       │   ║
+║   │  APScheduler: hourly radar · 2s live quotes · 3s movers   │   ║
 ║   │  SQLite (dev) → PostgreSQL (prod) via SQLAlchemy          │   ║
 ║   └───────────────────────────────────────────────────────────┘   ║
 ╚══════════════════════════════════════════════════════════════════╝
@@ -191,7 +197,7 @@ Real-time price streaming per symbol. Market movers (gainers, losers, cheapest, 
             ▼
   ┌──────────────────┐     ┌─────────────────────┐     ┌──────────────────┐
   │   NSE Scraper    │────▶│   3-Tier AI Stack   │────▶│  Signal Store    │
-  │  (hourly cron)   │     │   Gemini → GPT-4o   │     │  SQLite / PG     │
+  │  (hourly cron)   │     │  Gemini → GPT-4o mini│     │  SQLite / PG     │
   └──────────────────┘     │   → Rule fallback   │     └────────┬─────────┘
                            └─────────────────────┘              │
                                                                  ▼
@@ -256,7 +262,7 @@ Real-time price streaming per symbol. Market movers (gainers, losers, cheapest, 
 | **Backend** | FastAPI, Uvicorn, APScheduler | Async API, hourly scheduling, WebSockets |
 | **Database** | SQLite → PostgreSQL via SQLAlchemy | Auto-switch via `DATABASE_URL` |
 | **AI — Primary** | Gemini 2.5 Flash Lite | Market analysis, chat grounding |
-| **AI — Fallback** | GPT-4o | Quota resilience, zero downtime |
+| **AI — Fallback** | GPT-4o mini | Quota resilience, zero downtime |
 | **AI — Hard fallback** | Custom rule engine | Always-on, no API dependency |
 | **Auth** | JWT (python-jose), bcrypt, Google OAuth 2.0 | Authlib, silent token rotation |
 | **Email** | Brevo SMTP | Transactional verification emails |
@@ -354,7 +360,8 @@ npm run dev
 | `GET` | `/signals` | All active radar signals |
 | `POST` | `/signals/refresh` | Force radar refresh |
 | `GET` | `/card/{symbol}` | Full AI signal card for a stock |
-| `GET` | `/market/live/{symbol}` | Live NSE quote |
+| `GET` | `/market/price/{symbol}` | Ultra-fast price + OHLCV only — &lt;50 ms from cache |
+| `GET` | `/market/live/{symbol}` | Live NSE quote + intraday (price + OHLCV + chart data) |
 | `GET` | `/market/chart/{symbol}` | OHLCV chart data |
 | `WS` | `/market/ws/{symbol}` | Real-time WebSocket price feed |
 | `GET` | `/market/movers` | Top gainers, losers, cheapest, most expensive |
@@ -465,7 +472,7 @@ FIN-X/
 | The old way | The FIN-X way |
 |---|---|
 | Raw NSE bulk deal CSV — no context | AI-explained signal with risk level and confidence score |
-| Single AI model — single point of failure | 3-tier stack: Gemini → GPT-4o → rules. Zero downtime. |
+| Single AI model — single point of failure | 3-tier stack: Gemini → GPT-4o mini → rules. Zero downtime. |
 | Stock screeners that predict | Explanation-first: *why* it happened, not just *what* |
 | Generic financial chatbots | Context-injected: live prices + deals + news in every answer |
 | No auth or basic sessions | Production JWT + Google OAuth + bcrypt + rate limiting |
