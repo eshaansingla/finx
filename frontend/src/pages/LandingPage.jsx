@@ -116,7 +116,7 @@ export default function LandingPage({ onAuthed }) {
     }
   }
 
-  const googleLoginUrl = `${import.meta.env.VITE_API_URL}/api/v2/auth/google/login`
+  const googleLoginUrl = `${import.meta.env.VITE_API_URL}/v2/auth/google/login`
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col transition-colors duration-200">
