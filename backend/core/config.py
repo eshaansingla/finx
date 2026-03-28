@@ -42,7 +42,10 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
     # In local dev, the frontend runs on :5173 and proxies /api -> :8000.
     # Using a :5173 redirect keeps the auth session cookie on the same origin.
-    GOOGLE_REDIRECT_URI: str = "http://localhost:5173/api/v2/auth/google/callback"
+    GOOGLE_REDIRECT_URI: str = os.getenv(
+    "GOOGLE_REDIRECT_URI",
+    "https://finx-1.onrender.com/api/v2/auth/google/callback"
+)
 
 
 settings = Settings()
