@@ -43,7 +43,7 @@ const FEATURES = [
 ]
 
 const STATS = [
-  { value: 'Nearly All', label: 'NSE Stocks' },
+  { value: '~99%', label: 'NSE Stocks' },
   { value: '3-Tier', label: 'AI Fallback' },
   { value: '<50ms', label: 'Price Latency' },
   { value: 'Live', label: 'WebSocket Feed' },
