@@ -11,14 +11,14 @@ function useDebounce(value, delay) {
   return debounced
 }
 
-export default function SearchBar({ onSelect, placeholder = 'Search any NSE stock — e.g. Reliance, TCS, relaince…' }) {
-  const [query,       setQuery]       = useState('')
+export default function SearchBar({ onSelect, placeholder = 'Search any NSE stock — e.g. Reliance, TCS, etc…' }) {
+  const [query, setQuery] = useState('')
   const [suggestions, setSuggestions] = useState([])
-  const [loading,     setLoading]     = useState(false)
-  const [open,        setOpen]        = useState(false)
-  const [activeIdx,   setActiveIdx]   = useState(-1)
+  const [loading, setLoading] = useState(false)
+  const [open, setOpen] = useState(false)
+  const [activeIdx, setActiveIdx] = useState(-1)
   const inputRef = useRef(null)
-  const wrapRef  = useRef(null)
+  const wrapRef = useRef(null)
   const debouncedQ = useDebounce(query, 280)
 
   useEffect(() => {
@@ -57,7 +57,7 @@ export default function SearchBar({ onSelect, placeholder = 'Search any NSE stoc
       if (e.key === 'Enter' && query.trim()) { onSelect?.(query.trim().toUpperCase()); setOpen(false) }
       return
     }
-    if (e.key === 'ArrowDown')  { e.preventDefault(); setActiveIdx(i => Math.min(i + 1, suggestions.length - 1)) }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx(i => Math.min(i + 1, suggestions.length - 1)) }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIdx(i => Math.max(i - 1, -1)) }
     else if (e.key === 'Enter') {
       e.preventDefault()
@@ -73,7 +73,7 @@ export default function SearchBar({ onSelect, placeholder = 'Search any NSE stoc
                       focus-within:ring-blue-500/20 transition-all duration-150 shadow-sm">
         {loading
           ? <Loader2 className="w-4 h-4 text-gray-400 animate-spin flex-shrink-0" />
-          : <Search  className="w-4 h-4 text-gray-400 flex-shrink-0" />
+          : <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
         }
         <input
           ref={inputRef}
