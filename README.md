@@ -338,7 +338,7 @@ Module-level card cache (5 min TTL) + live price cache (session) means revisitin
 ### 1. Clone
 
 ```bash
-git clone https://github.com/eshaansingla/FIN-X.git
+git clone https://github.com/eshaansingla/finx.git
 cd FIN-X
 ```
 
